@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/fever_dreamer/Desktop/alphaflow/build",
+  "command": "/usr/bin/c++   -std=c++2b -arch arm64 -o CMakeFiles/alpha.dir/src/main.cpp.o -c /Users/fever_dreamer/Desktop/alphaflow/src/main.cpp",
+  "file": "/Users/fever_dreamer/Desktop/alphaflow/src/main.cpp",
+  "output": "CMakeFiles/alpha.dir/src/main.cpp.o"
+}
+]
