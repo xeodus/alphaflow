@@ -1,0 +1,23 @@
+# Build output
+/build/
+build-*/
+cmake-build-*/
+
+# vcpkg manifest-mode install tree
+/vcpkg_installed/
+
+# CMake-generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# clangd index cache
+/.cache/

@@ -1,3 +1,0 @@
-/Users/fever_dreamer/Desktop/alphaflow/build/CMakeFiles/alpha.dir
-/Users/fever_dreamer/Desktop/alphaflow/build/CMakeFiles/edit_cache.dir
-/Users/fever_dreamer/Desktop/alphaflow/build/CMakeFiles/rebuild_cache.dir
