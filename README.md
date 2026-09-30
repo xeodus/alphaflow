@@ -244,6 +244,15 @@ The presets are `dev` (Debug, warnings-as-errors), `release`, `asan`, `ubsan`,
 Continuous integration builds `dev`, `release`, `asan`, `ubsan`, and `tsan` on
 Linux, and `dev` on macOS.
 
+To run that whole matrix locally before pushing:
+
+```sh
+scripts/ci.sh
+```
+
+CI uses the ubuntu-latest default compiler (currently GCC 13 / libstdc++ 13),
+so avoid standard-library features newer than that baseline.
+
 At this stage the build produces a small binary that reports its monotonic
 clock source; the engine itself is being built out milestone by milestone.
 
