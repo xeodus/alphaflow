@@ -5,7 +5,8 @@
   "builtin-baseline": "319504a5326aa870edde46438c5455fa76305a56",
   "dependencies": [
     "benchmark",
-    "catch2"
+    "catch2",
+    "hdr-histogram"
   ],
   "features": {
     "oracle": {
