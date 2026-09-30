@@ -7,6 +7,7 @@
 add_library(alphaflow_core STATIC
     platform/clock.cpp
     platform/socket.cpp
+    rfq/protocol.cpp
 )
 add_library(alphaflow::core ALIAS alphaflow_core)
 

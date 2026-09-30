@@ -10,6 +10,7 @@ add_executable(alphaflow_tests
     unit/concurrency/seqlock_test.cpp
     unit/concurrency/latest_value_cache_test.cpp
     unit/concurrency/snapshot_pool_test.cpp
+    unit/rfq/protocol_test.cpp
 )
 
 target_compile_features(alphaflow_tests PRIVATE cxx_std_23)
