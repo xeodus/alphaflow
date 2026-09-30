@@ -17,6 +17,10 @@ Target audience: front-office rates/credit engineering (e.g. Citadel Securities)
 >   and ADR-014…ADR-019. **ADRs are frozen; prose may still be refined as M1
 >   produces evidence.** The rule for the build: *the ADRs are locked, the prose
 >   is a living spec.*
+> - **v0.3** — Phase 1 build feedback. Records the reclamation actually built as
+>   ADR-020 (reference counting with validate-on-acquire), superseding ADR-003's
+>   "epoch reclamation" wording, and corrects the snapshot reader-cost claim in
+>   §5.2.
 
 ---
 
@@ -181,22 +185,33 @@ lines to avoid false sharing, acquire on consume / release on produce.
   the ring carries only change-notifications, not every tick. The no-lost-change
   invariant is stated in §5.3.
 
-### 5.2 Snapshot publication `[ADR-003]` + `[ADR-016]`
+### 5.2 Snapshot publication `[ADR-003]` + `[ADR-016]` + `[ADR-020]`
 
-`SnapshotPtr<T>`: a handle into a **bounded pool** of preallocated, prefaulted
-snapshot slots, plus a `std::atomic<const T*>` publication pointer.
+A **bounded pool** of preallocated snapshot slots plus a single
+`std::atomic<Slot*>` publication pointer. The built type is
+`SnapshotPool<T, Depth>`; readers receive a move-only RAII lease.
 
-- Reader cost ≈ one acquire load.
+- **Reader cost `[ADR-020]`:** two loads, one atomic fetch-add, and one
+  `seq_cst` fence — **not** a single load. Safe reclamation needs a
+  validate-re-load and a fence; no cheaper scheme is correct. Stated plainly
+  because v0.2's "≈ one acquire load" cannot be met.
 - **Bounded pool `[ADR-016]`:** snapshots are **not** heap-allocated per rebuild.
-  The writer claims a free slot from a fixed pool, fills it, then release-publishes
-  the pointer. Readers acquire the pointer and register quiescence on release.
-- **Reclamation cannot be starved:** if no slot is quiescent when the writer
-  wants to publish (e.g. the Risk thread is holding an old snapshot through a
-  long bump-and-revalue), the writer **coalesces pending changes and reuses the
-  newest slot**, or skips a publication tick. A stalled reader degrades *freshness*
-  of the published curve; it can never block the writer or grow memory without
-  bound. Pool depth is a configuration constant sized to the number of concurrent
-  reader threads + headroom.
+  The writer claims a free slot, fills it, then release-publishes the pointer. A
+  reader *leases* the current snapshot; a lease keeps it valid and immutable for
+  its lifetime.
+- **Reclamation `[ADR-020]`:** reference counting with validate-on-acquire. The
+  reader pins the slot it loaded, then re-checks that the publication pointer
+  still points at it before trusting it; the writer reuses a slot only when it is
+  neither published nor pinned. A `seq_cst` fence on each side closes the
+  store→load race between "reader pins" and "writer scans"; without it the writer
+  can reclaim a slot a reader is in the act of pinning.
+- **Reclamation cannot be starved:** if no slot is free when the writer wants to
+  publish (e.g. the Risk thread holds an old snapshot through a long
+  bump-and-revalue), `try_publish` returns `false`; the writer coalesces and
+  retries on a later tick. A stalled reader degrades *freshness* of the published
+  curve; it can never block the writer or grow memory without bound. Pool depth
+  is a configuration constant sized to the number of concurrent reader threads +
+  headroom.
 - **Why not `std::atomic<std::shared_ptr<T>>`:** the standard-library
   implementation is typically lock/spinlock-based, reintroducing the tail
   latency you removed.
@@ -205,8 +220,10 @@ snapshot slots, plus a `std::atomic<const T*>` publication pointer.
   (`QuoteCache`).
 - **Why not a raw double-buffer:** the writer would be unable to write while a
   reader reads; needs triple buffering or seqlock anyway.
-- Reclamation is epoch/quiescent-state based; hazard pointers are an accepted
-  alternative if profiling shows epoch registration is hot.
+- **v2 option:** hazard pointers or an epoch scheme give each reader a private
+  registration slot and avoid the per-acquire atomic RMW. Deferred until
+  contention on the shared counter is observed; the validate step and the fence
+  remain in any scheme.
 
 ### 5.3 Quote cache `[ADR-004]`
 
@@ -588,6 +605,7 @@ That is a contract, enforced in CI, not an assumption:
 | **ADR-017** | **Cross-replica reproducibility contract** (hermetic build, fixed FP/ISA, order-stable reductions) | Assume determinism from "same code" |
 | **ADR-018** | **Throttled risk cadence**, decoupled from curve publication | Bump-and-revalue on every snapshot |
 | **ADR-019** | **Book assembled as an immutable `BookSnapshot`** from the replayed trade log | Undefined / implicit position source |
+| **ADR-020** | **Snapshot reclamation by reference counting with validate-on-acquire** (supersedes ADR-003's "epoch reclamation") | Epoch/quiescent-state (no cheaper — still needs a fence — and more machinery); hazard pointers (v2 if reader contention appears) |
 
 ---
 
