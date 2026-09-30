@@ -8,11 +8,13 @@ add_library(alphaflow_core STATIC
     platform/clock.cpp
     platform/socket.cpp
     rfq/protocol.cpp
+    metrics/histogram.cpp
 )
 add_library(alphaflow::core ALIAS alphaflow_core)
 
 target_include_directories(alphaflow_core PUBLIC "${PROJECT_SOURCE_DIR}/include")
 target_compile_features(alphaflow_core PUBLIC cxx_std_23)
+target_link_libraries(alphaflow_core PRIVATE hdr_histogram::hdr_histogram_static)
 alphaflow_enable_warnings(alphaflow_core)
 alphaflow_enable_warnings_as_errors(alphaflow_core)
 alphaflow_enable_sanitizers(alphaflow_core)

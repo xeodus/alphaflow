@@ -35,6 +35,8 @@ if(ALPHAFLOW_BUILD_BENCHMARKS)
     find_package(benchmark CONFIG REQUIRED)
 endif()
 
+find_package(hdr_histogram CONFIG REQUIRED)
+
 # --- Targets ----------------------------------------------------------------
 add_subdirectory(src)
 
