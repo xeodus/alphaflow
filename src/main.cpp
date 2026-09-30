@@ -1,6 +1,12 @@
 #include <alphaflow/platform/clock.hpp>
 
-#include <print>
+#include <iostream>
+
+// Note: this file deliberately uses <iostream> rather than C++23 <print>.
+// <print>/std::println are library features that require libstdc++ >= 14 or
+// libc++ >= 18; the CI baseline is GCC 13 / libstdc++ 13, which does not ship
+// them. The engine's value is in the library and tests, so the demo executable
+// stays on the most portable facilities available.
 
 namespace {
 
@@ -24,8 +30,9 @@ const char* source_name(ClockSource source) {
 int main() {
     Clock::initialize();
 
-    std::println("alphaflow — monotonic clock source: {}", source_name(Clock::source()));
-    std::println("alphaflow — monotonic now: {} ns", Clock::now_ns());
+    std::cout << "alphaflow - monotonic clock source: " << source_name(Clock::source())
+              << '\n';
+    std::cout << "alphaflow - monotonic now: " << Clock::now_ns() << " ns\n";
 
     return 0;
 }

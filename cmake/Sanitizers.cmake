@@ -26,4 +26,15 @@ function(alphaflow_enable_sanitizers target)
 
     target_compile_options(${target} PRIVATE ${_sanitizer_flags} -fno-omit-frame-pointer)
     target_link_options(${target} PRIVATE ${_sanitizer_flags})
+
+    # GCC's ThreadSanitizer cannot instrument atomic_thread_fence and warns
+    # (-Wtsan) for the seqlock's fences (concurrency/seqlock.hpp). TSan models
+    # relaxed atomics as synchronizing, so it never verified that ordering
+    # anyway; the fence protocol is justified by the argument in the header and
+    # by review. Suppress the known limitation so it cannot turn into an error
+    # once a first-party header is compiled into a -Werror target. Clang does
+    # not emit this warning, hence the GNU guard.
+    if(ALPHAFLOW_SANITIZER STREQUAL "thread" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${target} PRIVATE -Wno-tsan)
+    endif()
 endfunction()

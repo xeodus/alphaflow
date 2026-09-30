@@ -91,6 +91,11 @@
       "execution": { "noTestsAction": "error" }
     },
     {
+      "name": "release",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true }
+    },
+    {
       "name": "asan",
       "configurePreset": "asan",
       "output": { "outputOnFailure": true }

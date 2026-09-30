@@ -227,18 +227,25 @@ alphaflow/
 
 ## Building
 
-The project requires CMake 3.20 or newer and a C++23 compiler. On the current
-development machine the toolchain is Apple clang; the intended production
-toolchain is GCC or clang on Linux x86-64.
+Requirements: CMake 3.25 or newer, Ninja, a C++23 compiler (GCC 13+, Clang
+16+, or Apple Clang), and a checkout of vcpkg at `$HOME/vcpkg`. Dependencies
+are declared in `vcpkg.json` and pinned to a specific vcpkg baseline, so the
+build resolves the same versions everywhere.
 
 ```sh
-cmake -S . -B build
-cmake --build build
-./build/alpha
+cmake --preset dev
+cmake --build --preset dev
+ctest --preset dev
+./build/dev/src/alpha
 ```
 
-At this stage the build produces a placeholder binary; there is no runnable
-service yet. Build instructions will be expanded as the M1 target lands.
+The presets are `dev` (Debug, warnings-as-errors), `release`, `asan`, `ubsan`,
+`tsan`, and `bench`. Each writes to its own build directory under `build/`.
+Continuous integration builds `dev`, `release`, `asan`, `ubsan`, and `tsan` on
+Linux, and `dev` on macOS.
+
+At this stage the build produces a small binary that reports its monotonic
+clock source; the engine itself is being built out milestone by milestone.
 
 ## Documentation
 
