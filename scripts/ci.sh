@@ -7,9 +7,8 @@
 # macOS and Linux, but it cannot reproduce CI's Linux GCC toolchain from macOS:
 # treat it as a pre-flight check, not a substitute for CI.
 #
-# The CI baseline is the ubuntu-latest default compiler (currently GCC 13 /
-# libstdc++ 13). Avoid standard-library features newer than that baseline --
-# <print> is GCC 14+, for example.
+# The CI baseline is pinned to ubuntu-24.04 (GCC 13 / libstdc++ 13). Avoid
+# standard-library features newer than that baseline -- <print> is GCC 14+.
 #
 # Usage:
 #   scripts/ci.sh              # all CI presets

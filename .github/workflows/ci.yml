@@ -18,13 +18,16 @@ env:
 jobs:
   linux:
     name: linux / ${{ matrix.preset }}
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest: the baseline compiler and libraries are
+    # part of the contract (see README), and ubuntu-latest migrates to Ubuntu 26
+    # on 2026-10-19, which would silently change the toolchain underneath us.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         preset: [dev, release, asan, ubsan, tsan]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up vcpkg
         run: |
@@ -33,7 +36,7 @@ jobs:
           "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Cache vcpkg binary artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/vcpkg/archives
           key: vcpkg-${{ runner.os }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
@@ -57,9 +60,9 @@ jobs:
 
   macos:
     name: macos / dev
-    runs-on: macos-latest
+    runs-on: macos-15  # pinned for a stable arm64 dev toolchain
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up vcpkg
         run: |
@@ -68,7 +71,7 @@ jobs:
           "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Cache vcpkg binary artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/vcpkg/archives
           key: vcpkg-${{ runner.os }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}

@@ -250,8 +250,9 @@ To run that whole matrix locally before pushing:
 scripts/ci.sh
 ```
 
-CI uses the ubuntu-latest default compiler (currently GCC 13 / libstdc++ 13),
-so avoid standard-library features newer than that baseline.
+CI is pinned to `ubuntu-24.04` (GCC 13 / libstdc++ 13) and `macos-15`, so the
+toolchain baseline is explicit. Avoid standard-library features newer than that
+baseline — `<print>` is GCC 14+, for example.
 
 At this stage the build produces a small binary that reports its monotonic
 clock source; the engine itself is being built out milestone by milestone.
