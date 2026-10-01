@@ -11,6 +11,8 @@ add_executable(alphaflow_tests
     unit/concurrency/latest_value_cache_test.cpp
     unit/concurrency/snapshot_pool_test.cpp
     unit/rfq/protocol_test.cpp
+    unit/rfq/responder_test.cpp
+    unit/rfq/server_test.cpp
     unit/metrics/histogram_test.cpp
 )
 
