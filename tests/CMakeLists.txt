@@ -14,6 +14,7 @@ add_executable(alphaflow_tests
     unit/rfq/responder_test.cpp
     unit/rfq/server_test.cpp
     unit/metrics/histogram_test.cpp
+    integration/skeleton_test.cpp
 )
 
 target_compile_features(alphaflow_tests PRIVATE cxx_std_23)

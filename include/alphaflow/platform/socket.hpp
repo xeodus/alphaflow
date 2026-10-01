@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -68,6 +69,10 @@ public:
 
     /// Block until a connection arrives. Returns std::nullopt on error.
     [[nodiscard]] std::optional<Socket> accept() noexcept;
+
+    /// Block up to `timeout` for a connection. Returns std::nullopt on timeout
+    /// or error, so a caller can check its own stop flag between calls.
+    [[nodiscard]] std::optional<Socket> accept_for(std::chrono::milliseconds timeout) noexcept;
 
     void close() noexcept;
 

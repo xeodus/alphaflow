@@ -3,6 +3,7 @@
 #include <cerrno>
 
 #include <netinet/in.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -180,6 +181,18 @@ std::optional<Socket> Listener::accept() noexcept {
         }
         return std::nullopt;
     }
+}
+
+std::optional<Socket> Listener::accept_for(std::chrono::milliseconds timeout) noexcept {
+    pollfd descriptor{};
+    descriptor.fd = fd_;
+    descriptor.events = POLLIN;
+
+    const int ready = ::poll(&descriptor, 1, static_cast<int>(timeout.count()));
+    if (ready <= 0) {
+        return std::nullopt;  // timeout (0) or error (< 0)
+    }
+    return accept();
 }
 
 }  // namespace alphaflow::platform

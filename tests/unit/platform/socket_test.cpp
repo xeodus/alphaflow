@@ -6,12 +6,14 @@
 // behaviour the RFQ server will rely on: bind, connect, accept, send, receive,
 // detect peer close, and clean up on destruction.
 
+#include <alphaflow/platform/clock.hpp>
 #include <alphaflow/platform/socket.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -122,6 +124,34 @@ TEST_CASE("recv reports zero when the peer closes", "[platform][socket]") {
 
     server.join();
     REQUIRE(saw_close.load());
+}
+
+TEST_CASE("accept_for times out when nothing connects", "[platform][socket]") {
+    auto listener = Listener::listen_loopback(0);
+    REQUIRE(listener.has_value());
+
+    const auto start = alphaflow::platform::Clock::now_ns();
+    auto connection = listener->accept_for(std::chrono::milliseconds(20));
+    const auto elapsed = alphaflow::platform::Clock::now_ns() - start;
+
+    REQUIRE_FALSE(connection.has_value());
+    REQUIRE(elapsed >= 15'000'000);
+}
+
+TEST_CASE("accept_for returns a connection when one arrives", "[platform][socket]") {
+    auto listener = Listener::listen_loopback(0);
+    REQUIRE(listener.has_value());
+
+    std::thread client([&listener] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        auto socket = Socket::connect_loopback(listener->port());
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    });
+
+    auto connection = listener->accept_for(std::chrono::milliseconds(1000));
+    client.join();
+
+    REQUIRE(connection.has_value());
 }
 
 TEST_CASE("sockets are movable", "[platform][socket]") {
