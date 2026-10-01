@@ -6,6 +6,7 @@
 add_executable(alphaflow_tests
     unit/platform/clock_test.cpp
     unit/platform/socket_test.cpp
+    unit/core/date_test.cpp
     unit/concurrency/spsc_ring_test.cpp
     unit/concurrency/seqlock_test.cpp
     unit/concurrency/latest_value_cache_test.cpp
