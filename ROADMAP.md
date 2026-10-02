@@ -53,8 +53,8 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 ### Curve
 | Task | Status |
 |---|---|
-| `curve/interpolation` (log-linear discount factors) | **next** |
-| `curve/ois_instrument` (par rate, annuity, telescoping identity) | planned |
+| `curve/interpolation` (log-linear discount factors) | done |
+| `curve/ois_instrument` (par rate, annuity, telescoping identity) | **next** |
 | `curve/futures_convexity` (SR1/SR3 + futures/swap splice) | planned |
 | `curve/bootstrap` (Newton + Brent, config-driven tolerance) | planned |
 | real `curve_snapshot` (pillars, DFs, metadata) | planned |
