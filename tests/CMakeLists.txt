@@ -11,6 +11,7 @@ add_executable(alphaflow_tests
     unit/curve/calendar_test.cpp
     unit/curve/schedule_test.cpp
     unit/curve/discount_curve_test.cpp
+    unit/curve/ois_instrument_test.cpp
     unit/market/sequence_arbiter_test.cpp
     unit/market/arbiter_test.cpp
     unit/concurrency/spsc_ring_test.cpp
