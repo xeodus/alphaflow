@@ -11,6 +11,8 @@ struct hdr_histogram;
 
 namespace alphaflow::metrics {
 
+class IntervalRecorder;
+
 using Nanos = platform::Nanos;
 
 /// A measured stage. Every reported latency belongs to one of these.
@@ -109,6 +111,9 @@ public:
 
 private:
     hdr_histogram* histogram_{nullptr};
+
+    friend class IntervalRecorder;
+    [[nodiscard]] hdr_histogram* handle() const noexcept { return histogram_; }
 };
 
 /// Per-thread, single-stage recorder. Binds a stage (for its name and span) to

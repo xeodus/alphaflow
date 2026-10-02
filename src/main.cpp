@@ -24,6 +24,8 @@
 #include <alphaflow/market/arbiter.hpp>
 #include <alphaflow/market/tick.hpp>
 #include <alphaflow/metrics/histogram.hpp>
+#include <alphaflow/metrics/interval_recorder.hpp>
+#include <alphaflow/metrics/metrics_hub.hpp>
 #include <alphaflow/platform/clock.hpp>
 #include <alphaflow/platform/socket.hpp>
 #include <alphaflow/rfq/protocol.hpp>
@@ -52,6 +54,8 @@ using alphaflow::market::InstrumentId;
 using alphaflow::market::Tick;
 using alphaflow::metrics::LatencyProfile;
 using alphaflow::metrics::LatencyRecorder;
+using alphaflow::metrics::MetricsHub;
+using alphaflow::metrics::IntervalRecorder;
 using alphaflow::metrics::Stage;
 using alphaflow::platform::Clock;
 using alphaflow::platform::Listener;
@@ -183,8 +187,11 @@ int main(int argc, char** argv) {
     std::atomic<std::uint64_t> responses{0};
     std::atomic<std::uint64_t> republished{0};
 
-    LatencyRecorder rebuild_latency(Stage::Rebuild);
-    LatencyRecorder rfq_latency(Stage::Rfq);
+    IntervalRecorder rebuild_recorder;
+    IntervalRecorder rfq_recorder;
+    MetricsHub metrics_hub;
+    static_cast<void>(metrics_hub.add(Stage::Rebuild, rebuild_recorder));
+    static_cast<void>(metrics_hub.add(Stage::Rfq, rfq_recorder));
 
     const Responder<CurveSnapshot> responder(InstrumentUniverse{kInstrumentCount},
                                              kStalenessThresholdNs, &stub_price);
@@ -226,7 +233,7 @@ int main(int argc, char** argv) {
             ++generation;
             if (pool.try_publish(
                     CurveSnapshot{generation, Clock::now_ns(), sum / kInstrumentCount})) {
-                rebuild_latency.record_elapsed(start, Clock::now_ns());
+                rebuild_recorder.record_elapsed(start, Clock::now_ns());
                 republished.fetch_add(1, std::memory_order_relaxed);
             }
         }
@@ -238,12 +245,17 @@ int main(int argc, char** argv) {
             if (!connection) {
                 continue;
             }
-            Server<CurveSnapshot, kPoolDepth> server(pool, responder, rfq_latency);
+            Server<CurveSnapshot, kPoolDepth, IntervalRecorder> server(pool, responder,
+                                                                      rfq_recorder);
             server.serve(*connection);
         }
     });
 
     std::thread client_thread([&] { run_client(port, stop, responses); });
+
+    // The live Metrics thread drains the recorders while they record.
+    std::thread metrics_thread(
+        [&] { metrics_hub.run(stop, std::chrono::milliseconds(100)); });
 
     std::this_thread::sleep_for(std::chrono::seconds(seconds));
     stop.store(true, std::memory_order_relaxed);
@@ -254,6 +266,8 @@ int main(int argc, char** argv) {
     arbiter_thread.join();
     curve_thread.join();
     server_thread.join();
+    metrics_thread.join();
+    metrics_hub.sample_once();  // final drain after all recorders stopped
 
     std::cout << "responses: " << responses.load(std::memory_order_relaxed)
               << "  snapshots republished: " << republished.load(std::memory_order_relaxed)
@@ -263,7 +277,7 @@ int main(int argc, char** argv) {
               << " gaps(A)=" << arbiter.sequences().gap_count(FeedId::A)
               << " gaps(B)=" << arbiter.sequences().gap_count(FeedId::B) << "\n";
     std::cout << "metrics:\n";
-    print_profile(rebuild_latency.profile());
-    print_profile(rfq_latency.profile());
+    print_profile(metrics_hub.profile(Stage::Rebuild));
+    print_profile(metrics_hub.profile(Stage::Rfq));
     return 0;
 }

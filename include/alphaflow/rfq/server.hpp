@@ -24,12 +24,13 @@ namespace alphaflow::rfq {
 ///
 /// Nothing here allocates or locks; buffers are fixed and the snapshot lease is
 /// an RAII handle.
-template <typename Snapshot, std::size_t SnapshotDepth>
+template <typename Snapshot, std::size_t SnapshotDepth,
+          typename Recorder = metrics::LatencyRecorder>
 class Server {
 public:
     Server(concurrency::SnapshotPool<Snapshot, SnapshotDepth>& pool,
            const Responder<Snapshot>& responder,
-           metrics::LatencyRecorder& latency) noexcept
+           Recorder& latency) noexcept
         : pool_(pool), responder_(responder), latency_(latency) {}
 
     /// Blocking. Returns when the peer closes or a protocol error occurs.
@@ -92,7 +93,7 @@ public:
 private:
     concurrency::SnapshotPool<Snapshot, SnapshotDepth>& pool_;
     const Responder<Snapshot>& responder_;
-    metrics::LatencyRecorder& latency_;
+    Recorder& latency_;
 };
 
 }  // namespace alphaflow::rfq
