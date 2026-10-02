@@ -266,5 +266,5 @@ a decision log of every architectural choice marked with an ADR identifier.
 Where this README and the architecture document disagree, the architecture
 document wins.
 
-[`M1_PLAN.md`](M1_PLAN.md) schedules the M1 milestone: its phases, the task in
-each, and where every M1 exit criterion is earned.
+[`ROADMAP.md`](ROADMAP.md) is the single source of truth for delivery: the five
+milestones, every task and its status, and the dependency order.

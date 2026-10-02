@@ -637,10 +637,9 @@ alphaflow/
 
 ## 16. Milestones
 
-> The phase-by-phase build breakdown for M1 — which task is built when, and
-> where each M1 exit criterion is earned — lives in
-> [`M1_PLAN.md`](M1_PLAN.md). This section defines the milestone exit criteria;
-> the plan file schedules the work against them.
+> The delivery breakdown — every milestone and task, its status, and the
+> dependency order — lives in [`ROADMAP.md`](ROADMAP.md). This section defines
+> the milestone exit criteria; the roadmap tracks the work against them.
 
 **M1 — Vertical slice (first buildable target).** Synthetic SOFR feed → Arbiter →
 SPSC → incremental OIS bootstrap → swap RFQ over loopback → HdrHistogram. Done
