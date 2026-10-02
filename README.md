@@ -187,20 +187,20 @@ replaying the same log twice and requiring byte-identical output.
 ## Roadmap
 
 Work is organised into milestones, each a working system rather than a layer.
+The locked target scope is **M1 + M3 + M5** (see [`ROADMAP.md`](ROADMAP.md)).
 
 - **M1 — Vertical slice.** Synthetic feed through the arbiter and pricing queue
   into an incremental OIS bootstrap, a swap RFQ served over loopback, and a real
   latency histogram. Exits when the curve matches the oracle to within 1e-9, the
   swap identities hold, the sanitizers are clean, and one Linux latency report
   exists with a documented methodology.
-- **M2 — Breadth.** Bonds, Z-spread, and full DV01 and bucketed risk on their own
-  thread.
 - **M3 — Reliability.** Replay logging and checkpoint recovery, feed arbitration
   under injected failure, cross-replica determinism, and rolling restart.
-- **M4 — Depth.** P&L attribution, monotone-convex forward interpolation, and
-  adjoint risk.
 - **M5 — Performance hardening.** Core pinning, busy-polling, memory layout, and
   the final Linux latency report.
+- **M2 (breadth) and M4 (depth)** are out of scope: bonds/book risk and
+  P&L/AAD add little signal for a low-latency SWE role. A small order-book
+  module is a possible future add-on.
 
 ## Repository layout
 
