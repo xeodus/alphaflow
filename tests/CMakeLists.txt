@@ -1,7 +1,7 @@
 # Unit, integration, and oracle tests.
 #
-# Oracle tests depend on the (test-only) QuantLib oracle feature and are added
-# in a later milestone; this target currently hosts unit and integration tests.
+# The oracle target links QuantLib (test-only; gated by ALPHAFLOW_BUILD_ORACLE)
+# and is never part of the engine.
 
 add_executable(alphaflow_tests
     unit/platform/clock_test.cpp
@@ -44,4 +44,21 @@ endif()
 
 if(ALPHAFLOW_BUILD_BENCHMARKS)
     add_subdirectory(benchmark)
+endif()
+
+# QuantLib oracle: an independent reference implementation to validate the curve
+# and pricing against (ARCHITECTURE.md §13). Test-only; not sanitizer-built,
+# since QuantLib itself is a prebuilt third-party library.
+if(ALPHAFLOW_BUILD_ORACLE)
+    add_executable(alphaflow_oracle_tests
+        oracle/curve_oracle_test.cpp
+    )
+    target_compile_features(alphaflow_oracle_tests PRIVATE cxx_std_23)
+    target_link_libraries(alphaflow_oracle_tests PRIVATE
+        alphaflow::core
+        QuantLib::QuantLib
+        Catch2::Catch2WithMain
+    )
+    alphaflow_enable_warnings(alphaflow_oracle_tests)
+    add_test(NAME alphaflow_oracle_tests COMMAND alphaflow_oracle_tests)
 endif()

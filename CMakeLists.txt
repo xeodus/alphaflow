@@ -37,6 +37,13 @@ endif()
 
 find_package(hdr_histogram CONFIG REQUIRED)
 
+# QuantLib is a TEST-ONLY oracle (ARCHITECTURE.md §13): never linked into the
+# engine, enabled only by the dedicated `oracle` preset.
+option(ALPHAFLOW_BUILD_ORACLE "Build the QuantLib oracle tests" OFF)
+if(ALPHAFLOW_BUILD_ORACLE)
+    find_package(QuantLib CONFIG REQUIRED)
+endif()
+
 # --- Targets ----------------------------------------------------------------
 add_subdirectory(src)
 

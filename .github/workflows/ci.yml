@@ -58,6 +58,38 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
+  oracle:
+    name: linux / oracle
+    # QuantLib is heavy (Boost + QuantLib). The vcpkg binary cache makes this
+    # fast after the first successful run; it is test-only and never linked into
+    # the engine.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up vcpkg
+        run: |
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          git -C "$HOME/vcpkg" checkout "$VCPKG_BASELINE"
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-oracle-${{ runner.os }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-oracle-${{ runner.os }}-${{ env.VCPKG_BASELINE }}-
+
+      - name: Configure
+        run: cmake --preset oracle
+
+      - name: Build
+        run: cmake --build --preset oracle
+
+      - name: Test
+        run: ctest --preset oracle
+
   macos:
     name: macos / dev
     runs-on: macos-15  # pinned for a stable arm64 dev toolchain
