@@ -48,12 +48,12 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 | `core/date` (civil date arithmetic) | done |
 | `curve/day_count` (ACT/360, ACT/365F, ACT/ACT ISDA, 30/360, 30E/360) | done |
 | `curve/calendar` (SIFMA/NY-Fed holidays, Modified Following, EOM) | done |
-| `curve/schedule` (deterministic rolls, T+2 spot, EOM, stubs) | **next** |
+| `curve/schedule` (deterministic rolls, T+2 spot, EOM, stubs) | done |
 
 ### Curve
 | Task | Status |
 |---|---|
-| `curve/interpolation` (log-linear discount factors) | planned |
+| `curve/interpolation` (log-linear discount factors) | **next** |
 | `curve/ois_instrument` (par rate, annuity, telescoping identity) | planned |
 | `curve/futures_convexity` (SR1/SR3 + futures/swap splice) | planned |
 | `curve/bootstrap` (Newton + Brent, config-driven tolerance) | planned |

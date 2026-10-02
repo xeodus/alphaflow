@@ -10,6 +10,7 @@ add_library(alphaflow_core STATIC
     rfq/protocol.cpp
     metrics/histogram.cpp
     metrics/interval_recorder.cpp
+    curve/schedule.cpp
 )
 add_library(alphaflow::core ALIAS alphaflow_core)
 
