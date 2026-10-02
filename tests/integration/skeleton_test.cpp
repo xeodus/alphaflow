@@ -1,14 +1,16 @@
-// Integration test: the walking skeleton, end to end.
+// Integration test: the walking skeleton, end to end, now through the arbiter.
 //
-// Wires the real components -- SPSC ring, curve thread publishing into a
-// SnapshotPool, the RFQ server, and a client over loopback -- and checks that a
-// request is answered from a published snapshot and that the socket-to-socket
-// span is recorded. This is the "end-to-end smoke under load" of the milestone
-// plan; it runs under ASan/UBSan/TSan.
+// Feed A/B -> Arbiter -> QuoteCache + notifications -> CurveThread -> pool ->
+// RFQ server, with a client over loopback. Checks that requests are answered Ok
+// from a published snapshot, that the socket-to-socket span is recorded, and
+// that the arbiter drove the cache. Runs under ASan/UBSan/TSan.
 
+#include <alphaflow/concurrency/latest_value_cache.hpp>
 #include <alphaflow/concurrency/snapshot_ptr.hpp>
 #include <alphaflow/concurrency/spsc_ring.hpp>
 #include <alphaflow/curve/curve_snapshot.hpp>
+#include <alphaflow/market/arbiter.hpp>
+#include <alphaflow/market/tick.hpp>
 #include <alphaflow/metrics/histogram.hpp>
 #include <alphaflow/platform/clock.hpp>
 #include <alphaflow/platform/socket.hpp>
@@ -29,9 +31,14 @@
 
 namespace {
 
+using alphaflow::concurrency::LatestValueCache;
 using alphaflow::concurrency::SnapshotPool;
 using alphaflow::concurrency::SpscRing;
 using alphaflow::curve::CurveSnapshot;
+using alphaflow::market::Arbiter;
+using alphaflow::market::FeedId;
+using alphaflow::market::InstrumentId;
+using alphaflow::market::Tick;
 using alphaflow::metrics::LatencyRecorder;
 using alphaflow::metrics::Stage;
 using alphaflow::platform::Clock;
@@ -46,12 +53,34 @@ using alphaflow::rfq::Status;
 namespace protocol = alphaflow::rfq::protocol;
 
 constexpr std::size_t kPoolDepth = 8;
+constexpr std::size_t kInputCapacity = 256;
+constexpr std::size_t kCacheCapacity = 32;
+constexpr std::size_t kNotificationCapacity = 256;
 constexpr std::uint32_t kInstrumentCount = 4;
 constexpr std::uint32_t kRequestCount = 100;
 constexpr alphaflow::platform::Nanos kStalenessThresholdNs = 1'000'000'000LL;
 
+using InputRing = SpscRing<Tick, kInputCapacity>;
+using NotificationRing = SpscRing<InstrumentId, kNotificationCapacity>;
+using QuoteCache = LatestValueCache<double, kCacheCapacity>;
+using ArbiterThread = Arbiter<kCacheCapacity, kNotificationCapacity, kInputCapacity>;
+
 double stub_price(std::uint32_t instrument_id, const CurveSnapshot& snapshot) noexcept {
     return snapshot.par_rate * (1.0 + static_cast<double>(instrument_id));
+}
+
+void run_feed(InputRing& ring, FeedId feed, const std::atomic<bool>& stop) {
+    std::uint64_t sequence = 0;
+    while (!stop.load(std::memory_order_relaxed)) {
+        Tick tick;
+        tick.id = static_cast<InstrumentId>(sequence % kInstrumentCount);
+        tick.value = 0.02 + static_cast<double>(sequence % 7) * 0.001;
+        tick.seq = ++sequence;
+        tick.feed = feed;
+        tick.recv_tsc = Clock::now_ticks();
+        static_cast<void>(ring.try_push(tick));
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+    }
 }
 
 std::optional<Response> round_trip(Socket& client, const Request& request,
@@ -89,15 +118,20 @@ std::optional<Response> round_trip(Socket& client, const Request& request,
 
 }  // namespace
 
-TEST_CASE("the walking skeleton answers RFQs end to end", "[integration][skeleton]") {
+TEST_CASE("the walking skeleton answers RFQs end to end through the arbiter",
+          "[integration][skeleton]") {
+    InputRing ring_a;
+    InputRing ring_b;
+    QuoteCache cache;
+    NotificationRing notifications;
+    ArbiterThread arbiter(ring_a, ring_b, cache, notifications);
     SnapshotPool<CurveSnapshot, kPoolDepth> pool;
-    SpscRing<double, 256> ring;
+
     std::atomic<bool> stop{false};
 
     LatencyRecorder rebuild_latency(Stage::Rebuild);
     LatencyRecorder rfq_latency(Stage::Rfq);
 
-    // A snapshot exists from the start so the first request is not WarmingUp.
     REQUIRE(pool.try_publish(CurveSnapshot{1, Clock::now_ns(), 0.02}));
 
     const Responder<CurveSnapshot> responder(InstrumentUniverse{kInstrumentCount},
@@ -107,24 +141,34 @@ TEST_CASE("the walking skeleton answers RFQs end to end", "[integration][skeleto
     REQUIRE(listener.has_value());
     const std::uint16_t port = listener->port();
 
-    std::thread producer([&] {
-        while (!stop.load(std::memory_order_relaxed)) {
-            static_cast<void>(ring.try_push(0.03));
-            std::this_thread::sleep_for(std::chrono::microseconds(200));
-        }
-    });
+    std::thread feed_a([&] { run_feed(ring_a, FeedId::A, stop); });
+    std::thread feed_b([&] { run_feed(ring_b, FeedId::B, stop); });
+    std::thread arbiter_thread([&] { arbiter.run(stop); });
 
-    std::thread curve([&] {
+    std::thread curve_thread([&] {
+        std::array<double, kInstrumentCount> rates{};
         std::uint32_t generation = 1;
-        while (!stop.load(std::memory_order_relaxed) || !ring.empty()) {
-            double update = 0.0;
-            if (!ring.try_pop(update)) {
+        while (!stop.load(std::memory_order_relaxed) || !notifications.empty()) {
+            bool changed = false;
+            InstrumentId id = 0;
+            while (notifications.try_pop(id)) {
+                if (id < kInstrumentCount) {
+                    rates[id] = cache.load(id);
+                    changed = true;
+                }
+            }
+            if (!changed) {
                 std::this_thread::yield();
                 continue;
             }
+            double sum = 0.0;
+            for (double rate : rates) {
+                sum += rate;
+            }
             const auto start = Clock::now_ns();
             ++generation;
-            if (pool.try_publish(CurveSnapshot{generation, Clock::now_ns(), update})) {
+            if (pool.try_publish(
+                    CurveSnapshot{generation, Clock::now_ns(), sum / kInstrumentCount})) {
                 rebuild_latency.record_elapsed(start, Clock::now_ns());
             }
         }
@@ -151,7 +195,7 @@ TEST_CASE("the walking skeleton answers RFQs end to end", "[integration][skeleto
         const auto response = round_trip(*client, Request{id, id % kInstrumentCount}, decoder);
         REQUIRE(response.has_value());
         REQUIRE(response->status == Status::Ok);
-        ok_responses += 1;
+        ++ok_responses;
         if (response->generation > max_generation) {
             max_generation = response->generation;
         }
@@ -159,12 +203,16 @@ TEST_CASE("the walking skeleton answers RFQs end to end", "[integration][skeleto
 
     client->close();
     stop.store(true, std::memory_order_relaxed);
-    producer.join();
-    curve.join();
+    feed_a.join();
+    feed_b.join();
+    arbiter_thread.join();
+    curve_thread.join();
     server_thread.join();
 
     REQUIRE(ok_responses == kRequestCount);
     REQUIRE(max_generation >= 1);
     REQUIRE(rfq_latency.histogram().count() == kRequestCount);
     REQUIRE(rebuild_latency.histogram().count() >= 1);
+    REQUIRE(arbiter.sequences().duplicate_count() == 0);
+    REQUIRE(arbiter.sequences().active() == FeedId::A);
 }
