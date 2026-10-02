@@ -47,8 +47,8 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 |---|---|
 | `core/date` (civil date arithmetic) | done |
 | `curve/day_count` (ACT/360, ACT/365F, ACT/ACT ISDA, 30/360, 30E/360) | done |
-| `curve/calendar` (SIFMA/NY-Fed holidays, Modified Following, EOM) | **next** |
-| `curve/schedule` (deterministic rolls, T+2 spot, EOM, stubs) | planned |
+| `curve/calendar` (SIFMA/NY-Fed holidays, Modified Following, EOM) | done |
+| `curve/schedule` (deterministic rolls, T+2 spot, EOM, stubs) | **next** |
 
 ### Curve
 | Task | Status |
