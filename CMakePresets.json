@@ -31,7 +31,8 @@
       "displayName": "Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ALPHAFLOW_WARNINGS_AS_ERRORS": "ON"
+        "ALPHAFLOW_WARNINGS_AS_ERRORS": "ON",
+        "ALPHAFLOW_ENABLE_IPO": "ON"
       }
     },
     {
@@ -71,7 +72,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ALPHAFLOW_BUILD_TESTS": "ON",
-        "ALPHAFLOW_BUILD_BENCHMARKS": "ON"
+        "ALPHAFLOW_BUILD_BENCHMARKS": "ON",
+        "ALPHAFLOW_ENABLE_IPO": "ON"
       }
     },
     {

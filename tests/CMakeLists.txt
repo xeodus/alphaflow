@@ -31,6 +31,7 @@ add_executable(alphaflow_tests
     unit/metrics/metrics_hub_test.cpp
     integration/skeleton_test.cpp
     integration/determinism_test.cpp
+    integration/reliability_test.cpp
 )
 
 target_compile_features(alphaflow_tests PRIVATE cxx_std_23)

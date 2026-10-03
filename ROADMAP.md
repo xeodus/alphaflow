@@ -56,8 +56,8 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 |---|---|
 | `platform/clock` (monotonic + TSC) | done |
 | `market/tick`, `market/sequence_arbiter`, `market/arbiter` (A/B, sole cache writer) | done |
-| `market/synthetic_feed` (deterministic PRNG, rate-controlled, replayable) | planned |
-| `market/replay_log` + Logger thread (ADR-015) | planned |
+| `market/synthetic_feed` (deterministic PRNG, rate-controlled, replayable) | done |
+| `market/replay_log` + Logger thread (ADR-015) | done |
 
 ### Conventions (the #1 source of silent bugs)
 | Task | Status |
@@ -74,16 +74,16 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 | `curve/ois_instrument` (par rate, annuity, telescoping identity) | done |
 | **QuantLib oracle harness** (test-only) | done |
 | `curve/bootstrap` (Newton per pillar, config-driven tolerance) | done |
-| `curve/futures_convexity` (SR1/SR3 + futures/swap splice) | **next** |
-| real `curve_snapshot` (pillars, DFs, metadata) | planned |
-| incremental rebuild from earliest changed pillar | planned |
-| direct bootstrap-vs-QuantLib DF comparison (criterion 3) | planned |
+| `curve/futures_convexity` (SR1/SR3 + futures/swap splice) | done |
+| real `curve_snapshot` (pillars, DFs, metadata) | done |
+| incremental rebuild from earliest changed pillar | done |
+| direct bootstrap-vs-QuantLib DF comparison (criterion 3) | **next** |
 
 ### Pricing
 | Task | Status |
 |---|---|
-| `pricing/swap_pricer` + `Scratch` (allocation-free) | planned |
-| single-swap DV01 (bump-and-revalue) | planned |
+| `pricing/swap_pricer` (allocation-free; Scratch not needed for swaps) | done |
+| single-swap DV01 (bump-and-revalue) | done |
 
 ### Transport, observability, skeleton
 | Task | Status |
@@ -96,9 +96,9 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 | Task | Status |
 |---|---|
 | ASan/UBSan/TSan green; Linux `platform/` smoke (CI) | done |
-| determinism test (replay → byte-identical snapshot) | planned |
+| determinism test (replay → byte-identical snapshot) | done |
 | no-allocation guard on the RFQ path | planned |
-| benchmarks + in-process latency distribution | planned |
+| benchmarks + in-process latency distribution | done |
 | Linux latency report (needs hardware) | planned |
 
 ---
@@ -117,9 +117,9 @@ adds little signal for a low-latency SWE role.
 ## Milestone 3 — Reliability
 | Task | Status |
 |---|---|
-| replay log + checkpoint/recovery (kill -9 → restart → state matches) | planned |
-| A/B failure injection and promotion under stress | planned |
-| active-active determinism test (ADR-017) | planned |
+| replay log + checkpoint/recovery (kill -9 → restart → state matches) | done |
+| A/B failure injection and promotion under stress | done |
+| active-active determinism test (ADR-017) | done |
 | rolling restart / drain; watchdog; overload policy | planned |
 
 ## Milestone 4 — Depth *(out of scope)*
@@ -135,7 +135,7 @@ depth; revisit only if pivoting toward quant research/strats.
 ## Milestone 5 — Performance
 | Task | Status |
 |---|---|
-| core pinning, busy-poll sockets, memory layout, LTO/PGO | planned |
+| core pinning, busy-poll sockets, memory layout, LTO/PGO | partial — LTO done; pinning/busy-poll need Linux |
 | bare-metal Linux host | planned |
 | final latency report with methodology | planned |
 
