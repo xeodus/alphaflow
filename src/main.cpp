@@ -19,6 +19,9 @@
 #include <alphaflow/curve/day_count.hpp>
 #include <alphaflow/curve/schedule.hpp>
 #include <alphaflow/market/arbiter.hpp>
+#include <alphaflow/market/logger.hpp>
+#include <alphaflow/market/replay_log.hpp>
+#include <alphaflow/market/synthetic_feed.hpp>
 #include <alphaflow/market/tick.hpp>
 #include <alphaflow/metrics/histogram.hpp>
 #include <alphaflow/metrics/interval_recorder.hpp>
@@ -56,6 +59,9 @@ using alphaflow::curve::ScheduleSpec;
 using alphaflow::market::Arbiter;
 using alphaflow::market::FeedId;
 using alphaflow::market::InstrumentId;
+using alphaflow::market::Logger;
+using alphaflow::market::ReplayLog;
+using alphaflow::market::SyntheticFeed;
 using alphaflow::market::Tick;
 using alphaflow::metrics::IntervalRecorder;
 using alphaflow::metrics::LatencyProfile;
@@ -129,30 +135,9 @@ void print_profile(const LatencyProfile& profile) {
 
 void run_feed(InputRing& ring, FeedId feed, std::uint64_t seed,
               const std::atomic<bool>& stop) {
-    std::uint64_t state = seed;
-    std::uint64_t sequence = 0;
-    double value = 0.03;
-
+    SyntheticFeed generator(feed, static_cast<std::uint32_t>(kPillars), 0.03, seed);
     while (!stop.load(std::memory_order_relaxed)) {
-        state = state * 6'364'136'223'846'793'005ULL + 1'442'695'040'888'963'407ULL;
-        const double noise =
-            (static_cast<double>((state >> 40) & 0xFFFFU) / 65'535.0 - 0.5) * 0.001;
-        value += noise;
-        if (value < 0.005) {
-            value = 0.005;
-        }
-        if (value > 0.10) {
-            value = 0.10;
-        }
-
-        Tick tick;
-        tick.id = static_cast<InstrumentId>(sequence % kPillars);
-        tick.value = value;
-        tick.seq = ++sequence;
-        tick.feed = feed;
-        tick.recv_tsc = Clock::now_ticks();
-        static_cast<void>(ring.try_push(tick));
-
+        static_cast<void>(ring.try_push(generator.next()));
         std::this_thread::sleep_for(std::chrono::microseconds(50));
     }
 }
@@ -217,8 +202,13 @@ int main(int argc, char** argv) {
     InputRing ring_b;
     QuoteCache cache;
     NotificationRing notifications;
-    ArbiterThread arbiter(ring_a, ring_b, cache, notifications);
+    ArbiterThread::LogRing log_ring;
+    ArbiterThread arbiter(ring_a, ring_b, cache, notifications, &log_ring);
     SnapshotPool<CurveSnapshot, kPoolDepth> pool;
+
+    ReplayLog replay_log;
+    static_cast<void>(replay_log.open("alphaflow.replay"));
+    Logger<1024> logger(log_ring, replay_log);
 
     std::atomic<bool> stop{false};
     std::atomic<std::uint64_t> responses{0};
@@ -303,6 +293,8 @@ int main(int argc, char** argv) {
 
     std::thread client_thread([&] { run_client(port, stop, responses); });
 
+    std::thread logger_thread([&] { logger.run(stop); });
+
     std::thread metrics_thread(
         [&] { metrics_hub.run(stop, std::chrono::milliseconds(100)); });
 
@@ -316,11 +308,12 @@ int main(int argc, char** argv) {
     curve_thread.join();
     server_thread.join();
     metrics_thread.join();
+    logger_thread.join();
     metrics_hub.sample_once();
 
     std::cout << "responses: " << responses.load(std::memory_order_relaxed)
               << "  snapshots republished: " << republished.load(std::memory_order_relaxed)
-              << "\n";
+              << "  replay records: " << replay_log.count() << "\n";
     std::cout << "arbiter: active=" << (arbiter.sequences().active() == FeedId::A ? "A" : "B")
               << " duplicates=" << arbiter.sequences().duplicate_count()
               << " gaps(A)=" << arbiter.sequences().gap_count(FeedId::A)

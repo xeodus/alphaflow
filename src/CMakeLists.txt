@@ -13,6 +13,7 @@ add_library(alphaflow_core STATIC
     curve/schedule.cpp
     curve/bootstrap.cpp
     pricing/swap_pricer.cpp
+    market/replay_log.cpp
 )
 add_library(alphaflow::core ALIAS alphaflow_core)
 

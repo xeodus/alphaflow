@@ -16,6 +16,8 @@ add_executable(alphaflow_tests
     unit/pricing/swap_pricer_test.cpp
     unit/market/sequence_arbiter_test.cpp
     unit/market/arbiter_test.cpp
+    unit/market/synthetic_feed_test.cpp
+    unit/market/replay_log_test.cpp
     unit/concurrency/spsc_ring_test.cpp
     unit/concurrency/seqlock_test.cpp
     unit/concurrency/latest_value_cache_test.cpp

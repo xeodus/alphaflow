@@ -22,19 +22,21 @@ namespace alphaflow::market {
 /// Not thread-safe by itself; `run` is the thread body, `drain_once` is the
 /// single-threaded core used by tests.
 template <std::size_t CacheCapacity, std::size_t NotificationCapacity,
-          std::size_t InputCapacity>
+          std::size_t InputCapacity, std::size_t LogCapacity = 1024>
 class Arbiter {
 public:
     using InputRing = concurrency::SpscRing<Tick, InputCapacity>;
     using NotificationRing = concurrency::SpscRing<InstrumentId, NotificationCapacity>;
+    using LogRing = concurrency::SpscRing<Tick, LogCapacity>;
     using Cache = concurrency::LatestValueCache<double, CacheCapacity>;
 
     Arbiter(InputRing& ring_a, InputRing& ring_b, Cache& cache,
-            NotificationRing& notifications) noexcept
+            NotificationRing& notifications, LogRing* log = nullptr) noexcept
         : ring_a_(ring_a),
           ring_b_(ring_b),
           cache_(cache),
-          notifications_(notifications) {}
+          notifications_(notifications),
+          log_(log) {}
 
     /// Drain every available tick from both lines exactly once.
     void drain_once() noexcept {
@@ -68,12 +70,17 @@ private:
         // advanced, so a consumer that re-checks the epoch cannot miss the
         // change (the no-lost-change invariant, §5.3 / ADR-016).
         static_cast<void>(notifications_.try_push(tick.id));
+        // The replay log is best-effort and off the hot path (ADR-015).
+        if (log_ != nullptr) {
+            static_cast<void>(log_->try_push(tick));
+        }
     }
 
     InputRing& ring_a_;
     InputRing& ring_b_;
     Cache& cache_;
     NotificationRing& notifications_;
+    LogRing* log_{nullptr};
     SequenceArbiter sequences_;
 };
 
