@@ -30,6 +30,7 @@ using alphaflow::curve::DiscountCurve;
 using alphaflow::curve::Frequency;
 using alphaflow::curve::make_schedule;
 using alphaflow::curve::OisPillar;
+using alphaflow::curve::rebuild_from;
 using alphaflow::curve::Schedule;
 using alphaflow::curve::ScheduleSpec;
 namespace ois = alphaflow::curve::ois;
@@ -147,4 +148,39 @@ TEST_CASE("bootstrapping nothing yields the flat reference pillar",
     REQUIRE(result.pillars == 0);
     REQUIRE(result.curve.count == 1);
     REQUIRE(result.curve.discount(0.0) == Catch::Approx(1.0));
+}
+
+TEST_CASE("incremental rebuild from the earliest changed pillar matches a full rebuild",
+          "[curve][bootstrap]") {
+    const Calendar calendar = Calendar::united_states();
+
+    std::array<OisPillar, kPillars> pillars{};
+    for (std::size_t i = 0; i < kPillars; ++i) {
+        pillars[i] = OisPillar{maturity(i), 0.02 + 0.005 * static_cast<double>(i)};
+    }
+    BootstrapSpec spec;
+    spec.reference = kSpot;
+    spec.frequency = Frequency::Annual;
+
+    const BootstrapResult full = bootstrap(pillars, calendar, spec);
+    REQUIRE(full.converged);
+
+    // Move pillar 2 (the 3Y point); only pillars at or after it may change.
+    std::array<OisPillar, kPillars> changed = pillars;
+    changed[2].par_rate += 0.005;
+
+    DiscountCurve incremental = full.curve;
+    REQUIRE(rebuild_from(incremental, 2, changed, calendar, spec));
+
+    // Curve indices 0..2 (reference + pillars 0 and 1) are untouched.
+    for (std::size_t i = 0; i <= 2; ++i) {
+        REQUIRE(incremental.log_dfs[i] == full.curve.log_dfs[i]);
+    }
+
+    // And the result equals a full rebuild with the changed quotes.
+    const BootstrapResult reference = bootstrap(changed, calendar, spec);
+    for (std::size_t i = 0; i <= kPillars; ++i) {
+        REQUIRE(incremental.log_dfs[i] ==
+                Catch::Approx(reference.curve.log_dfs[i]).epsilon(1e-12));
+    }
 }

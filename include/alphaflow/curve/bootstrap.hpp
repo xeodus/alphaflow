@@ -48,4 +48,14 @@ struct BootstrapResult {
                                         const Calendar& calendar,
                                         const BootstrapSpec& spec) noexcept;
 
+/// Re-solve the curve in place from pillar `first_changed` onward, keeping the
+/// already-solved earlier pillars. Because interpolation is local and the
+/// bootstrap is sequential, only pillars at or after `first_changed` can change;
+/// this is the correct incremental boundary (ADR-008). The curve must already
+/// have `pillars.size() + 1` entries. Returns false if any re-solve fails.
+[[nodiscard]] bool rebuild_from(DiscountCurve& curve, std::size_t first_changed,
+                                std::span<const OisPillar> pillars,
+                                const Calendar& calendar,
+                                const BootstrapSpec& spec) noexcept;
+
 }  // namespace alphaflow::curve
