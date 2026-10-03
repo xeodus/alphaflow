@@ -11,6 +11,7 @@ add_library(alphaflow_core STATIC
     metrics/histogram.cpp
     metrics/interval_recorder.cpp
     curve/schedule.cpp
+    curve/bootstrap.cpp
 )
 add_library(alphaflow::core ALIAS alphaflow_core)
 
