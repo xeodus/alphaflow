@@ -6,6 +6,7 @@
 
 add_executable(alphaflow_benchmarks
     platform/clock_benchmark.cpp
+    pricing/swap_pricer_benchmark.cpp
 )
 
 target_compile_features(alphaflow_benchmarks PRIVATE cxx_std_23)
