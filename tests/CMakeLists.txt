@@ -30,6 +30,7 @@ add_executable(alphaflow_tests
     unit/metrics/histogram_test.cpp
     unit/metrics/interval_recorder_test.cpp
     unit/metrics/metrics_hub_test.cpp
+    unit/metrics/watchdog_test.cpp
     integration/skeleton_test.cpp
     integration/determinism_test.cpp
     integration/reliability_test.cpp
@@ -68,6 +69,7 @@ endif()
 if(ALPHAFLOW_BUILD_ORACLE)
     add_executable(alphaflow_oracle_tests
         oracle/curve_oracle_test.cpp
+        oracle/bootstrap_oracle_test.cpp
     )
     target_compile_features(alphaflow_oracle_tests PRIVATE cxx_std_23)
     target_link_libraries(alphaflow_oracle_tests PRIVATE

@@ -77,7 +77,7 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 | `curve/futures_convexity` (SR1/SR3 + futures/swap splice) | done |
 | real `curve_snapshot` (pillars, DFs, metadata) | done |
 | incremental rebuild from earliest changed pillar | done |
-| direct bootstrap-vs-QuantLib DF comparison (criterion 3) | **next** |
+| direct bootstrap-vs-QuantLib DF comparison (criterion 3) | done |
 
 ### Pricing
 | Task | Status |
@@ -120,7 +120,7 @@ adds little signal for a low-latency SWE role.
 | replay log + checkpoint/recovery (kill -9 → restart → state matches) | done |
 | A/B failure injection and promotion under stress | done |
 | active-active determinism test (ADR-017) | done |
-| rolling restart / drain; watchdog; overload policy | planned |
+| rolling restart / drain; watchdog; overload policy | done |
 
 ## Milestone 4 — Depth *(out of scope)*
 

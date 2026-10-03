@@ -77,6 +77,7 @@ using alphaflow::rfq::InstrumentUniverse;
 using alphaflow::rfq::Request;
 using alphaflow::rfq::Responder;
 using alphaflow::rfq::Server;
+using alphaflow::rfq::ServerOptions;
 namespace protocol = alphaflow::rfq::protocol;
 
 constexpr std::size_t kPoolDepth = 8;
@@ -211,6 +212,8 @@ int main(int argc, char** argv) {
     Logger<1024> logger(log_ring, replay_log);
 
     std::atomic<bool> stop{false};
+    std::atomic<bool> draining{false};
+    std::atomic<bool> overloaded{false};
     std::atomic<std::uint64_t> responses{0};
     std::atomic<std::uint64_t> republished{0};
 
@@ -287,7 +290,7 @@ int main(int argc, char** argv) {
             }
             Server<CurveSnapshot, kPoolDepth, IntervalRecorder> server(pool, responder,
                                                                       rfq_recorder);
-            server.serve(*connection);
+            server.serve(*connection, ServerOptions{&draining, &overloaded});
         }
     });
 

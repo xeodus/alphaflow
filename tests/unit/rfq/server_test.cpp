@@ -36,6 +36,7 @@ using alphaflow::rfq::Request;
 using alphaflow::rfq::Responder;
 using alphaflow::rfq::Response;
 using alphaflow::rfq::Server;
+using alphaflow::rfq::ServerOptions;
 using alphaflow::rfq::Status;
 namespace protocol = alphaflow::rfq::protocol;
 
@@ -195,4 +196,66 @@ TEST_CASE("the server reports warming up when nothing is published",
     REQUIRE(response.has_value());
     REQUIRE(response->status == Status::WarmingUp);
     REQUIRE(latency.histogram().count() == 1);
+}
+
+TEST_CASE("an overloaded server sheds load with an Overloaded response",
+          "[rfq][server]") {
+    SnapshotPool<StubSnapshot, 4> pool;
+    REQUIRE(pool.try_publish(StubSnapshot{1, Clock::now_ns(), 0.05}));
+
+    const Responder<StubSnapshot> responder(InstrumentUniverse{2}, 1'000'000'000LL, &stub_price);
+    LatencyRecorder latency(Stage::Rfq);
+    std::atomic<bool> overloaded{true};
+
+    auto listener = Listener::listen_loopback(0);
+    REQUIRE(listener.has_value());
+
+    std::thread server_thread([&] {
+        auto connection = listener->accept();
+        if (!connection) {
+            return;
+        }
+        Server<StubSnapshot, 4> server(pool, responder, latency);
+        server.serve(*connection, ServerOptions{nullptr, &overloaded});
+    });
+
+    auto client = Socket::connect_loopback(listener->port());
+    REQUIRE(client.has_value());
+
+    protocol::FrameDecoder decoder;
+    const auto response = send_and_receive(*client, Request{9, 0}, decoder);
+    client->close();
+    server_thread.join();
+
+    REQUIRE(response.has_value());
+    REQUIRE(response->request_id == 9);
+    REQUIRE(response->status == Status::Overloaded);
+}
+
+TEST_CASE("a draining server returns promptly", "[rfq][server]") {
+    SnapshotPool<StubSnapshot, 4> pool;
+
+    const Responder<StubSnapshot> responder(InstrumentUniverse{2}, 1'000'000'000LL, &stub_price);
+    LatencyRecorder latency(Stage::Rfq);
+    std::atomic<bool> draining{true};
+
+    auto listener = Listener::listen_loopback(0);
+    REQUIRE(listener.has_value());
+
+    std::atomic<bool> served{false};
+    std::thread server_thread([&] {
+        auto connection = listener->accept();
+        if (!connection) {
+            return;
+        }
+        Server<StubSnapshot, 4> server(pool, responder, latency);
+        server.serve(*connection, ServerOptions{&draining, nullptr});
+        served.store(true);
+    });
+
+    auto client = Socket::connect_loopback(listener->port());
+    REQUIRE(client.has_value());
+    server_thread.join();
+    REQUIRE(served.load());
+    client->close();
 }
