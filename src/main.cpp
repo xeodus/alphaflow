@@ -1,26 +1,23 @@
-// AlphaFlow walking skeleton.
+// AlphaFlow walking skeleton, now on a real curve.
 //
-// The full M1 data path in miniature, wired through every primitive:
+//   feed A/B -> arbiter -> QuoteCache -> CurveThread (bootstrap) -> SnapshotPool
+//                                                                      |
+//                        self-load client -> RFQ server (real swap prices)
 //
-//   feed A ──SPSC──┐
-//   feed B ──SPSC──┴─▶ ArbiterThread ──▶ QuoteCache + notification ring
-//                                             │
-//                                             ▼
-//                                       CurveThread ──▶ SnapshotPool
-//                                                             │
-//                        self-load client ──▶ RFQ server ─────┘
-//
-// The feeds are synthetic and the pricer is a stub; what is real is the
-// lock-free ring, the single-writer arbiter, the per-instrument quote cache,
-// the immutable-snapshot publication, the socket-to-socket RFQ path, and its
-// measurement. Real market data, curve, and pricing land in later phases.
+// The feeds are synthetic, but the curve is a real bootstrapped USD SOFR curve
+// and the RFQ path prices real OIS swaps off it.
 //
 // Usage: alpha [seconds]     (default 5)
 
 #include <alphaflow/concurrency/latest_value_cache.hpp>
 #include <alphaflow/concurrency/snapshot_ptr.hpp>
 #include <alphaflow/concurrency/spsc_ring.hpp>
+#include <alphaflow/core/date.hpp>
+#include <alphaflow/curve/bootstrap.hpp>
+#include <alphaflow/curve/calendar.hpp>
 #include <alphaflow/curve/curve_snapshot.hpp>
+#include <alphaflow/curve/day_count.hpp>
+#include <alphaflow/curve/schedule.hpp>
 #include <alphaflow/market/arbiter.hpp>
 #include <alphaflow/market/tick.hpp>
 #include <alphaflow/metrics/histogram.hpp>
@@ -28,6 +25,7 @@
 #include <alphaflow/metrics/metrics_hub.hpp>
 #include <alphaflow/platform/clock.hpp>
 #include <alphaflow/platform/socket.hpp>
+#include <alphaflow/pricing/swap_pricer.hpp>
 #include <alphaflow/rfq/protocol.hpp>
 #include <alphaflow/rfq/responder.hpp>
 #include <alphaflow/rfq/server.hpp>
@@ -47,20 +45,28 @@ namespace {
 using alphaflow::concurrency::LatestValueCache;
 using alphaflow::concurrency::SnapshotPool;
 using alphaflow::concurrency::SpscRing;
+using alphaflow::core::Date;
+using alphaflow::curve::BootstrapSpec;
+using alphaflow::curve::Calendar;
 using alphaflow::curve::CurveSnapshot;
+using alphaflow::curve::DayCount;
+using alphaflow::curve::Frequency;
+using alphaflow::curve::OisPillar;
+using alphaflow::curve::ScheduleSpec;
 using alphaflow::market::Arbiter;
 using alphaflow::market::FeedId;
 using alphaflow::market::InstrumentId;
 using alphaflow::market::Tick;
-using alphaflow::metrics::LatencyProfile;
-using alphaflow::metrics::LatencyRecorder;
-using alphaflow::metrics::MetricsHub;
 using alphaflow::metrics::IntervalRecorder;
+using alphaflow::metrics::LatencyProfile;
+using alphaflow::metrics::MetricsHub;
 using alphaflow::metrics::Stage;
 using alphaflow::platform::Clock;
 using alphaflow::platform::Listener;
 using alphaflow::platform::Nanos;
 using alphaflow::platform::Socket;
+using alphaflow::pricing::price_swap;
+using alphaflow::pricing::SwapSpec;
 using alphaflow::rfq::InstrumentUniverse;
 using alphaflow::rfq::Request;
 using alphaflow::rfq::Responder;
@@ -71,16 +77,45 @@ constexpr std::size_t kPoolDepth = 8;
 constexpr std::size_t kInputCapacity = 1024;
 constexpr std::size_t kCacheCapacity = 64;
 constexpr std::size_t kNotificationCapacity = 1024;
-constexpr std::uint32_t kInstrumentCount = 8;
+constexpr std::size_t kPillars = 5;
+constexpr std::uint32_t kInstrumentCount = static_cast<std::uint32_t>(kPillars);
 constexpr Nanos kStalenessThresholdNs = 100'000'000;  // 100 ms
+const Date kSpot{2024, 1, 8};
 
 using InputRing = SpscRing<Tick, kInputCapacity>;
 using NotificationRing = SpscRing<InstrumentId, kNotificationCapacity>;
 using QuoteCache = LatestValueCache<double, kCacheCapacity>;
 using ArbiterThread = Arbiter<kCacheCapacity, kNotificationCapacity, kInputCapacity>;
 
-double stub_price(std::uint32_t instrument_id, const CurveSnapshot& snapshot) noexcept {
-    return snapshot.par_rate * (1.0 + static_cast<double>(instrument_id));
+Date pillar_maturity(std::size_t index) {
+    return kSpot.add_months(static_cast<int>(12 * (index + 1)));
+}
+
+/// The book of quotable swaps: instrument `i` is a par OIS swap of tenor i+1.
+const std::array<SwapSpec, kPillars>& book() {
+    static const std::array<SwapSpec, kPillars> instances = [] {
+        std::array<SwapSpec, kPillars> result{};
+        for (std::size_t i = 0; i < kPillars; ++i) {
+            ScheduleSpec spec;
+            spec.effective = kSpot;
+            spec.termination = pillar_maturity(i);
+            spec.frequency = Frequency::Annual;
+            result[i].schedule =
+                alphaflow::curve::make_schedule(spec, Calendar::united_states(),
+                                                DayCount::Actual360);
+            result[i].notional = 1'000'000.0;
+            result[i].fixed_rate = 0.03;
+        }
+        return result;
+    }();
+    return instances;
+}
+
+double real_price(std::uint32_t instrument_id, const CurveSnapshot& snapshot) noexcept {
+    if (instrument_id >= kPillars) {
+        return 0.0;
+    }
+    return price_swap(snapshot, book()[instrument_id]).par_rate;
 }
 
 void print_profile(const LatencyProfile& profile) {
@@ -92,34 +127,36 @@ void print_profile(const LatencyProfile& profile) {
     std::cout << "    span: " << alphaflow::metrics::stage_span(profile.stage) << "\n";
 }
 
-/// A deterministic synthetic feed line: a fixed LCG random walk, one tick at a
-/// time, cycling through the instruments. (The full replayable generator is a
-/// later milestone; this is enough to exercise the data path.)
 void run_feed(InputRing& ring, FeedId feed, std::uint64_t seed,
               const std::atomic<bool>& stop) {
     std::uint64_t state = seed;
     std::uint64_t sequence = 0;
-    double value = 0.02;
+    double value = 0.03;
 
     while (!stop.load(std::memory_order_relaxed)) {
         state = state * 6'364'136'223'846'793'005ULL + 1'442'695'040'888'963'407ULL;
         const double noise =
             (static_cast<double>((state >> 40) & 0xFFFFU) / 65'535.0 - 0.5) * 0.001;
         value += noise;
+        if (value < 0.005) {
+            value = 0.005;
+        }
+        if (value > 0.10) {
+            value = 0.10;
+        }
 
         Tick tick;
-        tick.id = static_cast<InstrumentId>(sequence % kInstrumentCount);
+        tick.id = static_cast<InstrumentId>(sequence % kPillars);
         tick.value = value;
         tick.seq = ++sequence;
         tick.feed = feed;
         tick.recv_tsc = Clock::now_ticks();
-        static_cast<void>(ring.try_push(tick));  // full: drop (coalesced upstream)
+        static_cast<void>(ring.try_push(tick));
 
         std::this_thread::sleep_for(std::chrono::microseconds(50));
     }
 }
 
-/// A synchronous self-load client: send a request, wait for its response.
 void run_client(std::uint16_t port, std::atomic<bool>& stop,
                 std::atomic<std::uint64_t>& responses) {
     auto client = Socket::connect_loopback(port);
@@ -194,7 +231,7 @@ int main(int argc, char** argv) {
     static_cast<void>(metrics_hub.add(Stage::Rfq, rfq_recorder));
 
     const Responder<CurveSnapshot> responder(InstrumentUniverse{kInstrumentCount},
-                                             kStalenessThresholdNs, &stub_price);
+                                             kStalenessThresholdNs, &real_price);
 
     auto listener = Listener::listen_loopback(0);
     if (!listener) {
@@ -206,17 +243,23 @@ int main(int argc, char** argv) {
 
     std::thread feed_a([&] { run_feed(ring_a, FeedId::A, 0x9e37'79b9'7f4a'7c15ULL, stop); });
     std::thread feed_b([&] { run_feed(ring_b, FeedId::B, 0xbf58'476d'1ce4'e5b9ULL, stop); });
-
     std::thread arbiter_thread([&] { arbiter.run(stop); });
 
     std::thread curve_thread([&] {
-        std::array<double, kInstrumentCount> rates{};
+        const Calendar calendar = Calendar::united_states();
+        BootstrapSpec spec;
+        spec.reference = kSpot;
+        spec.frequency = Frequency::Annual;
+
+        std::array<double, kPillars> rates{};
+        rates.fill(0.03);
         std::uint32_t generation = 0;
+
         while (!stop.load(std::memory_order_relaxed) || !notifications.empty()) {
             bool changed = false;
             InstrumentId id = 0;
             while (notifications.try_pop(id)) {
-                if (id < kInstrumentCount) {
+                if (id < kPillars) {
                     rates[id] = cache.load(id);
                     changed = true;
                 }
@@ -225,16 +268,23 @@ int main(int argc, char** argv) {
                 std::this_thread::yield();
                 continue;
             }
-            double sum = 0.0;
-            for (double rate : rates) {
-                sum += rate;
+
+            std::array<OisPillar, kPillars> pillars{};
+            for (std::size_t i = 0; i < kPillars; ++i) {
+                pillars[i] = OisPillar{pillar_maturity(i), rates[i]};
             }
+
             const auto start = Clock::now_ns();
-            ++generation;
-            if (pool.try_publish(
-                    CurveSnapshot{generation, Clock::now_ns(), sum / kInstrumentCount})) {
-                rebuild_recorder.record_elapsed(start, Clock::now_ns());
-                republished.fetch_add(1, std::memory_order_relaxed);
+            const auto boot = alphaflow::curve::bootstrap(pillars, calendar, spec);
+            if (boot.converged) {
+                CurveSnapshot snapshot;
+                snapshot.generation = ++generation;
+                snapshot.published_at_ns = Clock::now_ns();
+                snapshot.curve = boot.curve;
+                if (pool.try_publish(snapshot)) {
+                    rebuild_recorder.record_elapsed(start, Clock::now_ns());
+                    republished.fetch_add(1, std::memory_order_relaxed);
+                }
             }
         }
     });
@@ -253,7 +303,6 @@ int main(int argc, char** argv) {
 
     std::thread client_thread([&] { run_client(port, stop, responses); });
 
-    // The live Metrics thread drains the recorders while they record.
     std::thread metrics_thread(
         [&] { metrics_hub.run(stop, std::chrono::milliseconds(100)); });
 
@@ -267,7 +316,7 @@ int main(int argc, char** argv) {
     curve_thread.join();
     server_thread.join();
     metrics_thread.join();
-    metrics_hub.sample_once();  // final drain after all recorders stopped
+    metrics_hub.sample_once();
 
     std::cout << "responses: " << responses.load(std::memory_order_relaxed)
               << "  snapshots republished: " << republished.load(std::memory_order_relaxed)

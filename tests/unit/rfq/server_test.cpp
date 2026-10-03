@@ -7,7 +7,6 @@
 #include <alphaflow/rfq/server.hpp>
 
 #include <alphaflow/concurrency/snapshot_ptr.hpp>
-#include <alphaflow/curve/curve_snapshot.hpp>
 #include <alphaflow/metrics/histogram.hpp>
 #include <alphaflow/platform/clock.hpp>
 #include <alphaflow/platform/socket.hpp>
@@ -27,7 +26,6 @@
 namespace {
 
 using alphaflow::concurrency::SnapshotPool;
-using alphaflow::curve::CurveSnapshot;
 using alphaflow::metrics::LatencyRecorder;
 using alphaflow::metrics::Stage;
 using alphaflow::platform::Clock;
@@ -41,7 +39,14 @@ using alphaflow::rfq::Server;
 using alphaflow::rfq::Status;
 namespace protocol = alphaflow::rfq::protocol;
 
-double stub_price(std::uint32_t instrument_id, const CurveSnapshot& snapshot) noexcept {
+/// A minimal snapshot for exercising the server without the real curve.
+struct StubSnapshot {
+    std::uint32_t generation{0};
+    alphaflow::platform::Nanos published_at_ns{0};
+    double par_rate{0.0};
+};
+
+double stub_price(std::uint32_t instrument_id, const StubSnapshot& snapshot) noexcept {
     return snapshot.par_rate * (1.0 + static_cast<double>(instrument_id));
 }
 
@@ -82,10 +87,10 @@ std::optional<Response> send_and_receive(Socket& client, const Request& request,
 
 TEST_CASE("the server answers a request from the current snapshot",
           "[rfq][server]") {
-    SnapshotPool<CurveSnapshot, 4> pool;
-    REQUIRE(pool.try_publish(CurveSnapshot{1, Clock::now_ns(), 0.02}));
+    SnapshotPool<StubSnapshot, 4> pool;
+    REQUIRE(pool.try_publish(StubSnapshot{1, Clock::now_ns(), 0.02}));
 
-    const Responder<CurveSnapshot> responder(InstrumentUniverse{4}, 1'000'000'000LL, &stub_price);
+    const Responder<StubSnapshot> responder(InstrumentUniverse{4}, 1'000'000'000LL, &stub_price);
     LatencyRecorder latency(Stage::Rfq);
 
     auto listener = Listener::listen_loopback(0);
@@ -97,7 +102,7 @@ TEST_CASE("the server answers a request from the current snapshot",
         if (!connection) {
             return;
         }
-        Server<CurveSnapshot, 4> server(pool, responder, latency);
+        Server<StubSnapshot, 4> server(pool, responder, latency);
         server.serve(*connection);
         server_ok.store(true);
     });
@@ -123,10 +128,10 @@ TEST_CASE("the server answers a request from the current snapshot",
 
 TEST_CASE("the server answers several framed requests in one connection",
           "[rfq][server]") {
-    SnapshotPool<CurveSnapshot, 4> pool;
-    REQUIRE(pool.try_publish(CurveSnapshot{9, Clock::now_ns(), 0.05}));
+    SnapshotPool<StubSnapshot, 4> pool;
+    REQUIRE(pool.try_publish(StubSnapshot{9, Clock::now_ns(), 0.05}));
 
-    const Responder<CurveSnapshot> responder(InstrumentUniverse{2}, 1'000'000'000LL, &stub_price);
+    const Responder<StubSnapshot> responder(InstrumentUniverse{2}, 1'000'000'000LL, &stub_price);
     LatencyRecorder latency(Stage::Rfq);
 
     auto listener = Listener::listen_loopback(0);
@@ -137,7 +142,7 @@ TEST_CASE("the server answers several framed requests in one connection",
         if (!connection) {
             return;
         }
-        Server<CurveSnapshot, 4> server(pool, responder, latency);
+        Server<StubSnapshot, 4> server(pool, responder, latency);
         server.serve(*connection);
     });
 
@@ -162,9 +167,9 @@ TEST_CASE("the server answers several framed requests in one connection",
 
 TEST_CASE("the server reports warming up when nothing is published",
           "[rfq][server]") {
-    SnapshotPool<CurveSnapshot, 4> pool;  // deliberately empty
+    SnapshotPool<StubSnapshot, 4> pool;  // deliberately empty
 
-    const Responder<CurveSnapshot> responder(InstrumentUniverse{2}, 1'000'000'000LL, &stub_price);
+    const Responder<StubSnapshot> responder(InstrumentUniverse{2}, 1'000'000'000LL, &stub_price);
     LatencyRecorder latency(Stage::Rfq);
 
     auto listener = Listener::listen_loopback(0);
@@ -175,7 +180,7 @@ TEST_CASE("the server reports warming up when nothing is published",
         if (!connection) {
             return;
         }
-        Server<CurveSnapshot, 4> server(pool, responder, latency);
+        Server<StubSnapshot, 4> server(pool, responder, latency);
         server.serve(*connection);
     });
 

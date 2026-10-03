@@ -13,6 +13,7 @@ add_executable(alphaflow_tests
     unit/curve/discount_curve_test.cpp
     unit/curve/ois_instrument_test.cpp
     unit/curve/bootstrap_test.cpp
+    unit/pricing/swap_pricer_test.cpp
     unit/market/sequence_arbiter_test.cpp
     unit/market/arbiter_test.cpp
     unit/concurrency/spsc_ring_test.cpp

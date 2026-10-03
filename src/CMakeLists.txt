@@ -12,6 +12,7 @@ add_library(alphaflow_core STATIC
     metrics/interval_recorder.cpp
     curve/schedule.cpp
     curve/bootstrap.cpp
+    pricing/swap_pricer.cpp
 )
 add_library(alphaflow::core ALIAS alphaflow_core)
 
