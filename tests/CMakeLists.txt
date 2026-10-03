@@ -15,6 +15,7 @@ add_executable(alphaflow_tests
     unit/curve/bootstrap_test.cpp
     unit/curve/futures_convexity_test.cpp
     unit/pricing/swap_pricer_test.cpp
+    unit/pricing/no_alloc_test.cpp
     unit/market/sequence_arbiter_test.cpp
     unit/market/arbiter_test.cpp
     unit/market/synthetic_feed_test.cpp
@@ -41,6 +42,14 @@ target_link_libraries(alphaflow_tests PRIVATE
 )
 alphaflow_enable_warnings(alphaflow_tests)
 alphaflow_enable_sanitizers(alphaflow_tests)
+
+# The no-allocation guard replaces the global allocator; compile it only when no
+# sanitizer is active, since ASan/TSan intercept the allocator themselves.
+target_include_directories(alphaflow_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT ALPHAFLOW_SANITIZER OR ALPHAFLOW_SANITIZER STREQUAL "none")
+    target_sources(alphaflow_tests PRIVATE support/allocation_guard.cpp)
+    target_compile_definitions(alphaflow_tests PRIVATE ALPHAFLOW_ALLOCATION_GUARD=1)
+endif()
 
 include(Catch OPTIONAL)
 if(COMMAND catch_discover_tests)

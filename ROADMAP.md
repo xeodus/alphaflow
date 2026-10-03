@@ -97,7 +97,7 @@ swap RFQ over loopback → HdrHistogram. Real curve, real prices, oracle-checked
 |---|---|
 | ASan/UBSan/TSan green; Linux `platform/` smoke (CI) | done |
 | determinism test (replay → byte-identical snapshot) | done |
-| no-allocation guard on the RFQ path | planned |
+| no-allocation guard on the RFQ path | done |
 | benchmarks + in-process latency distribution | done |
 | Linux latency report (needs hardware) | planned |
 
